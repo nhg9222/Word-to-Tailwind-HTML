@@ -1,0 +1,5 @@
+{
+  "name": "Text to Tailwind HTML Converter",
+  "description": "Chuyển đổi nội dung văn bản sang mã HTML được định dạng bằng Tailwind CSS sử dụng AI.",
+  "requestFramePermissions": []
+}
