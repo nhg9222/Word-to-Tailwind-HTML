@@ -129,10 +129,10 @@ export default function App() {
     if (file) processFile(file);
   };
 
-  const getScrollTopHtml = () => {
+  const getScrollTopHtml = (themeColor: string = '#4f46e5') => {
     if (!showScrollTop) return '';
     return `
-      <button id="scrollTopBtn" title="Cuộn lên đầu trang" style="display: none; position: fixed; bottom: 30px; right: 30px; z-index: 99; border: none; outline: none; background-color: #4f46e5; color: white; cursor: pointer; width: 48px; height: 48px; border-radius: 50%; box-shadow: 0 4px 12px rgba(0,0,0,0.15); transition: all 0.3s ease; display: flex; align-items: center; justify-content: center;">
+      <button id="scrollTopBtn" title="Cuộn lên đầu trang" style="display: none; position: fixed; bottom: 30px; right: 30px; z-index: 99; border: none; outline: none; background-color: ${themeColor}; color: white; cursor: pointer; width: 48px; height: 48px; border-radius: 50%; box-shadow: 0 4px 12px rgba(0,0,0,0.15); transition: all 0.3s ease; display: flex; align-items: center; justify-content: center;">
         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15-6-6-6 6"/></svg>
       </button>
       <script>
@@ -162,7 +162,7 @@ export default function App() {
     ${output}
   </div>
   ${currentTemplate.footer()}
-  ${getScrollTopHtml()}
+  ${getScrollTopHtml(currentTemplate.themeColor)}
 </div>` : `
 <div class="prose prose-indigo max-w-none p-8">
   ${output}
@@ -182,7 +182,7 @@ export default function App() {
             ${output}
         </div>
         ${currentTemplate.footer()}
-        ${getScrollTopHtml()}
+        ${getScrollTopHtml(currentTemplate.themeColor)}
     </div>` : `
     <div class="prose prose-indigo max-w-none p-8 sm:p-12 md:p-16 mx-auto">
         ${output}
@@ -200,7 +200,7 @@ export default function App() {
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         body { font-family: 'Inter', sans-serif; background-color: ${applyTemplate ? '#f3f4f6' : '#fff'}; margin: 0; padding: 0; }
-        #scrollTopBtn:hover { transform: translateY(-3px); background-color: #4f46e5 !important; }
+        #scrollTopBtn:hover { transform: translateY(-3px); background-color: ${applyTemplate ? currentTemplate.themeColor : '#4f46e5'} !important; opacity: 0.9; }
     </style>
 </head>
 <body>
@@ -238,7 +238,7 @@ export default function App() {
               ${output}
             </div>
             ${currentTemplate.footer()}
-            ${getScrollTopHtml()}
+            ${getScrollTopHtml(currentTemplate.themeColor)}
           </div>` : `
           <div class="bg-white p-8 sm:p-12 md:p-16">
             <div id="content" class="prose prose-indigo max-w-none mx-auto">
@@ -260,7 +260,7 @@ export default function App() {
                 body { font-family: 'Inter', sans-serif; margin: 0; padding: 0; background-color: ${applyTemplate ? '#f3f4f6' : '#fff'}; }
                 body::-webkit-scrollbar { display: none; }
                 body { -ms-overflow-style: none; scrollbar-width: none; }
-                #scrollTopBtn:hover { transform: translateY(-3px); background-color: #4f46e5 !important; }
+                #scrollTopBtn:hover { transform: translateY(-3px); background-color: ${applyTemplate ? currentTemplate.themeColor : '#4f46e5'} !important; opacity: 0.9; }
               </style>
             </head>
             <body>
