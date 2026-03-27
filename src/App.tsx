@@ -14,6 +14,9 @@ import {
   Trash2,
   ChevronRight,
   ArrowUp,
+  Palette,
+  ChevronDown,
+  Settings2,
   Loader2,
   Monitor,
   Smartphone,
@@ -38,7 +41,9 @@ export default function App() {
   const [deviceMode, setDeviceMode] = useState<DeviceMode>('desktop');
   const [conversionMode, setConversionMode] = useState<ConversionMode>('structured');
   const [selectedStyleId, setSelectedStyleId] = useState<string>('minimal');
+  const [applyTemplate, setApplyTemplate] = useState(true);
   const [showScrollTop, setShowScrollTop] = useState(true);
+  const [isStyleMenuOpen, setIsStyleMenuOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
@@ -150,7 +155,7 @@ export default function App() {
 
   const handleCopy = () => {
     const currentTemplate = templates.find(t => t.id === selectedStyleId) || templates[0];
-    const fullHtmlForCopy = `
+    const contentHtml = applyTemplate ? `
 <div class="${currentTemplate.containerClass}">
   ${currentTemplate.header(fileName?.replace('.docx', '') || '')}
   <div class="prose prose-indigo max-w-none">
@@ -158,14 +163,32 @@ export default function App() {
   </div>
   ${currentTemplate.footer()}
   ${getScrollTopHtml()}
+</div>` : `
+<div class="prose prose-indigo max-w-none p-8">
+  ${output}
+  ${getScrollTopHtml()}
 </div>`;
-    navigator.clipboard.writeText(fullHtmlForCopy);
+    navigator.clipboard.writeText(contentHtml);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
 
   const handleDownload = () => {
     const currentTemplate = templates.find(t => t.id === selectedStyleId) || templates[0];
+    const bodyContent = applyTemplate ? `
+    <div class="${currentTemplate.containerClass}">
+        ${currentTemplate.header(fileName?.replace('.docx', '') || '')}
+        <div class="prose prose-indigo max-w-none">
+            ${output}
+        </div>
+        ${currentTemplate.footer()}
+        ${getScrollTopHtml()}
+    </div>` : `
+    <div class="prose prose-indigo max-w-none p-8 sm:p-12 md:p-16 mx-auto">
+        ${output}
+        ${getScrollTopHtml()}
+    </div>`;
+
     const fullHtml = `
 <!DOCTYPE html>
 <html lang="vi">
@@ -176,19 +199,12 @@ export default function App() {
     <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; margin: 0; padding: 0; }
-        #scrollTopBtn:hover { transform: translateY(-3px); background-color: #4338ca !important; }
+        body { font-family: 'Inter', sans-serif; background-color: ${applyTemplate ? '#f3f4f6' : '#fff'}; margin: 0; padding: 0; }
+        #scrollTopBtn:hover { transform: translateY(-3px); background-color: #4f46e5 !important; }
     </style>
 </head>
 <body>
-    <div class="${currentTemplate.containerClass}">
-        ${currentTemplate.header(fileName?.replace('.docx', '') || '')}
-        <div class="prose prose-indigo max-w-none">
-            ${output}
-        </div>
-        ${currentTemplate.footer()}
-        ${getScrollTopHtml()}
-    </div>
+    ${bodyContent}
 </body>
 </html>`;
 
@@ -209,12 +225,28 @@ export default function App() {
     setError(null);
   };
 
-  // Update iframe content when output or style changes
+  // Update iframe content when output, style or settings change
   useEffect(() => {
     if (previewRef.current && output) {
       const doc = previewRef.current.contentDocument;
       if (doc) {
         const currentTemplate = templates.find(t => t.id === selectedStyleId) || templates[0];
+        const bodyContent = applyTemplate ? `
+          <div class="${currentTemplate.containerClass}">
+            ${currentTemplate.header(fileName?.replace('.docx', '') || '')}
+            <div id="content" class="prose prose-indigo max-w-none">
+              ${output}
+            </div>
+            ${currentTemplate.footer()}
+            ${getScrollTopHtml()}
+          </div>` : `
+          <div class="bg-white p-8 sm:p-12 md:p-16">
+            <div id="content" class="prose prose-indigo max-w-none mx-auto">
+              ${output}
+            </div>
+            ${getScrollTopHtml()}
+          </div>`;
+
         doc.open();
         doc.write(`
           <!DOCTYPE html>
@@ -225,28 +257,21 @@ export default function App() {
               <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
               <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
               <style>
-                body { font-family: 'Inter', sans-serif; margin: 0; padding: 0; background-color: #f3f4f6; }
+                body { font-family: 'Inter', sans-serif; margin: 0; padding: 0; background-color: ${applyTemplate ? '#f3f4f6' : '#fff'}; }
                 body::-webkit-scrollbar { display: none; }
                 body { -ms-overflow-style: none; scrollbar-width: none; }
-                #scrollTopBtn:hover { transform: translateY(-3px); background-color: #4338ca !important; }
+                #scrollTopBtn:hover { transform: translateY(-3px); background-color: #4f46e5 !important; }
               </style>
             </head>
             <body>
-              <div class="${currentTemplate.containerClass}">
-                ${currentTemplate.header(fileName?.replace('.docx', '') || '')}
-                <div id="content" class="prose prose-indigo max-w-none">
-                  ${output}
-                </div>
-                ${currentTemplate.footer()}
-                ${getScrollTopHtml()}
-              </div>
+              ${bodyContent}
             </body>
           </html>
         `);
         doc.close();
       }
     }
-  }, [output, viewMode, selectedStyleId, fileName, showScrollTop]);
+  }, [output, viewMode, selectedStyleId, fileName, showScrollTop, applyTemplate]);
 
   return (
     <div 
@@ -266,24 +291,24 @@ export default function App() {
           </div>
         </div>
       )}
-
-      {/* Header */}
-      <header className="flex items-center justify-between px-6 py-4 bg-white border-b border-[#E5E7EB] shrink-0">
+      <header className="flex items-center justify-between px-3 sm:px-6 py-2.5 sm:py-4 bg-white border-b border-[#E5E7EB] shrink-0">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center">
+          <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center shrink-0">
             <FileCode className="text-white w-5 h-5" />
           </div>
-          <h1 className="text-lg font-semibold tracking-tight">Word to Tailwind HTML</h1>
+          <h1 className="text-sm sm:text-lg font-bold tracking-tight truncate max-w-[100px] xs:max-w-[150px] sm:max-w-none">
+            Word to HTML
+          </h1>
         </div>
         
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-1.5 sm:gap-3">
           {output && (
             <button 
               onClick={handleReset}
               className="p-2 text-[#6B7280] hover:bg-[#F3F4F6] rounded-lg transition-colors"
               title="Xóa tất cả"
             >
-              <Trash2 className="w-5 h-5" />
+              <Trash2 className="w-4.5 h-4.5 sm:w-5 sm:h-5" />
             </button>
           )}
           <input
@@ -297,16 +322,17 @@ export default function App() {
             onClick={() => fileInputRef.current?.click()}
             disabled={isParsing}
             className={cn(
-              "flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium transition-all",
+              "flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 py-1.5 sm:py-2 bg-indigo-600 text-white rounded-lg text-xs sm:text-sm font-medium transition-all",
               "hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
             )}
           >
             {isParsing ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
+              <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 animate-spin" />
             ) : (
-              <Upload className="w-4 h-4" />
+              <Upload className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             )}
-            {isParsing ? 'Đang xử lý...' : 'Tải lên Word (.docx)'}
+            <span className="hidden xs:inline">{isParsing ? 'Đang xử lý...' : 'Tải lên Word'}</span>
+            <span className="xs:hidden">{isParsing ? '...' : 'Tải lên'}</span>
           </button>
         </div>
       </header>
@@ -314,165 +340,218 @@ export default function App() {
       {/* Main Content */}
       <main className="flex flex-1 overflow-hidden">
         {/* Output Area */}
-        <div className="flex-1 flex flex-col bg-[#F3F4F6]">
+        <div className="flex-1 flex flex-col bg-[#F3F4F6] overflow-hidden">
           {/* Output Toolbar */}
-          <div className="flex items-center justify-between px-4 py-2 bg-white border-b border-[#E5E7EB]">
-            <div className="flex items-center gap-4">
-              <div className="flex bg-[#F3F4F6] p-1 rounded-lg">
+          <div className="flex flex-col md:flex-row md:items-center justify-between px-3 sm:px-4 py-2 bg-white border-b border-[#E5E7EB] gap-2 sm:gap-3 shrink-0">
+            <div className="flex flex-wrap items-center gap-2">
+              {/* View Mode */}
+              <div className="flex bg-[#F3F4F6] p-1 rounded-lg shrink-0">
                 <button
                   onClick={() => setViewMode('preview')}
                   className={cn(
-                    "flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-all",
+                    "flex items-center gap-1.5 px-2 sm:px-3 py-1 text-[11px] sm:text-sm font-medium rounded-md transition-all",
                     viewMode === 'preview' 
                       ? "bg-white text-indigo-600 shadow-sm" 
                       : "text-[#6B7280] hover:text-[#374151]"
                   )}
                 >
-                  <Eye className="w-4 h-4" />
-                  Xem trước
+                  <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                  <span>Xem</span>
                 </button>
                 <button
                   onClick={() => setViewMode('code')}
                   className={cn(
-                    "flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-all",
+                    "flex items-center gap-1.5 px-2 sm:px-3 py-1 text-[11px] sm:text-sm font-medium rounded-md transition-all",
                     viewMode === 'code' 
                       ? "bg-white text-indigo-600 shadow-sm" 
                       : "text-[#6B7280] hover:text-[#374151]"
                   )}
                 >
-                  <Code className="w-4 h-4" />
-                  Mã nguồn
+                  <Code className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                  <span>Mã</span>
                 </button>
               </div>
 
-              <div className="h-6 w-px bg-[#E5E7EB]" />
+              <div className="hidden xs:block h-6 w-px bg-[#E5E7EB]" />
 
-              <div className="flex bg-[#F3F4F6] p-1 rounded-lg">
+              {/* Conversion Mode */}
+              <div className="flex bg-[#F3F4F6] p-1 rounded-lg shrink-0">
                 <button
                   onClick={() => handleModeChange('structured')}
                   className={cn(
-                    "px-3 py-1.5 text-sm font-medium rounded-md transition-all",
+                    "px-2 sm:px-3 py-1 text-[11px] sm:text-sm font-medium rounded-md transition-all",
                     conversionMode === 'structured' 
                       ? "bg-white text-indigo-600 shadow-sm" 
                       : "text-[#6B7280] hover:text-[#374151]"
                   )}
-                  title="Giữ nguyên cấu trúc (Tiêu đề, Danh sách...)"
+                  title="Giữ nguyên cấu trúc"
                 >
                   Cấu trúc
                 </button>
                 <button
                   onClick={() => handleModeChange('plain')}
                   className={cn(
-                    "px-3 py-1.5 text-sm font-medium rounded-md transition-all",
+                    "px-2 sm:px-3 py-1 text-[11px] sm:text-sm font-medium rounded-md transition-all",
                     conversionMode === 'plain' 
                       ? "bg-white text-indigo-600 shadow-sm" 
                       : "text-[#6B7280] hover:text-[#374151]"
                   )}
-                  title="Chỉ lấy các thẻ <p>"
+                  title="Chỉ thẻ P"
                 >
-                  Chỉ thẻ P
+                  Thẻ P
                 </button>
               </div>
 
-              <div className="h-6 w-px bg-[#E5E7EB]" />
+              <div className="hidden xs:block h-6 w-px bg-[#E5E7EB]" />
 
-              <div className="flex bg-[#F3F4F6] p-1 rounded-lg">
-                {templates.map((template) => (
-                  <button
-                    key={template.id}
-                    onClick={() => setSelectedStyleId(template.id)}
-                    className={cn(
-                      "px-3 py-1.5 text-sm font-medium rounded-md transition-all",
-                      selectedStyleId === template.id 
-                        ? "bg-white text-indigo-600 shadow-sm" 
-                        : "text-[#6B7280] hover:text-[#374151]"
-                    )}
-                    title={template.description}
-                  >
-                    {template.name}
-                  </button>
-                ))}
+              {/* Style Dropdown */}
+              <div className="relative shrink-0">
+                <button
+                  onClick={() => setIsStyleMenuOpen(!isStyleMenuOpen)}
+                  className={cn(
+                    "flex items-center gap-1.5 px-2 sm:px-3 py-1 text-[11px] sm:text-sm font-medium rounded-lg transition-all border shadow-sm",
+                    applyTemplate 
+                      ? "bg-white text-indigo-600 border-indigo-200" 
+                      : "bg-white text-[#6B7280] border-[#E5E7EB] hover:bg-[#F3F4F6]"
+                  )}
+                >
+                  <Palette className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                  <span>Giao diện</span>
+                  <ChevronDown className={cn("w-3 h-3 transition-transform", isStyleMenuOpen && "rotate-180")} />
+                </button>
+
+                {isStyleMenuOpen && (
+                  <>
+                    <div 
+                      className="fixed inset-0 z-10" 
+                      onClick={() => setIsStyleMenuOpen(false)} 
+                    />
+                    <div className="absolute top-full left-0 mt-2 w-64 bg-white rounded-xl shadow-xl border border-[#E5E7EB] z-20 py-2 animate-in fade-in slide-in-from-top-2 duration-200">
+                      <div className="px-4 py-2 border-b border-[#F3F4F6] flex items-center justify-between">
+                        <span className="text-[10px] font-bold text-[#9CA3AF] uppercase tracking-wider">Cấu hình</span>
+                        <label className="relative inline-flex items-center cursor-pointer">
+                          <input 
+                            type="checkbox" 
+                            className="sr-only peer" 
+                            checked={applyTemplate}
+                            onChange={() => setApplyTemplate(!applyTemplate)}
+                          />
+                          <div className="w-8 h-4 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-indigo-600"></div>
+                        </label>
+                      </div>
+                      
+                      <div className="px-2 py-2">
+                        <span className="px-2 py-1 text-[10px] font-bold text-[#9CA3AF] uppercase tracking-wider">Chọn mẫu</span>
+                        <div className="mt-1 space-y-1">
+                          {templates.map((template) => (
+                            <button
+                              key={template.id}
+                              disabled={!applyTemplate}
+                              onClick={() => {
+                                setSelectedStyleId(template.id);
+                                setIsStyleMenuOpen(false);
+                              }}
+                              className={cn(
+                                "w-full text-left px-3 py-2 rounded-lg text-sm transition-colors flex flex-col gap-0.5",
+                                !applyTemplate && "opacity-50 cursor-not-allowed",
+                                selectedStyleId === template.id 
+                                  ? "bg-indigo-50 text-indigo-700" 
+                                  : "text-[#4B5563] hover:bg-[#F3F4F6]"
+                              )}
+                            >
+                              <span className="font-semibold">{template.name}</span>
+                              <span className="text-[10px] opacity-70 leading-tight">{template.description}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
 
-              <div className="h-6 w-px bg-[#E5E7EB]" />
-
+              {/* Scroll Top Toggle */}
               <button
                 onClick={() => setShowScrollTop(!showScrollTop)}
                 className={cn(
-                  "flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-lg transition-all border",
+                  "flex items-center gap-1.5 px-2 sm:px-3 py-1 text-[11px] sm:text-sm font-medium rounded-lg transition-all border shadow-sm shrink-0",
                   showScrollTop 
                     ? "bg-indigo-50 text-indigo-600 border-indigo-200" 
                     : "bg-white text-[#6B7280] border-[#E5E7EB] hover:bg-[#F3F4F6]"
                 )}
-                title="Bật/Tắt nút cuộn lên đầu trang"
+                title="Cuộn lên đầu trang"
               >
-                <ArrowUp className="w-4 h-4" />
-                Lên đầu trang
+                <ArrowUp className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                <span className="hidden xs:inline">Lên đầu</span>
               </button>
             </div>
 
-            {viewMode === 'preview' && output && (
-              <div className="flex items-center gap-1 bg-[#F3F4F6] p-1 rounded-lg">
-                <button
-                  onClick={() => setDeviceMode('desktop')}
-                  className={cn(
-                    "p-1.5 rounded-md transition-all",
-                    deviceMode === 'desktop' ? "bg-white text-indigo-600 shadow-sm" : "text-[#6B7280]"
-                  )}
-                >
-                  <Monitor className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => setDeviceMode('tablet')}
-                  className={cn(
-                    "p-1.5 rounded-md transition-all",
-                    deviceMode === 'tablet' ? "bg-white text-indigo-600 shadow-sm" : "text-[#6B7280]"
-                  )}
-                >
-                  <Tablet className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => setDeviceMode('mobile')}
-                  className={cn(
-                    "p-1.5 rounded-md transition-all",
-                    deviceMode === 'mobile' ? "bg-white text-indigo-600 shadow-sm" : "text-[#6B7280]"
-                  )}
-                >
-                  <Smartphone className="w-4 h-4" />
-                </button>
-              </div>
-            )}
+            <div className="flex items-center justify-between md:justify-end gap-2 sm:gap-3 w-full md:w-auto border-t md:border-none pt-2 md:pt-0">
+              {/* Device Preview (Hidden on mobile) */}
+              {viewMode === 'preview' && output && (
+                <div className="hidden sm:flex items-center gap-1 bg-[#F3F4F6] p-1 rounded-lg shrink-0">
+                  <button
+                    onClick={() => setDeviceMode('desktop')}
+                    className={cn(
+                      "p-1 rounded-md transition-all",
+                      deviceMode === 'desktop' ? "bg-white text-indigo-600 shadow-sm" : "text-[#6B7280]"
+                    )}
+                  >
+                    <Monitor className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                  </button>
+                  <button
+                    onClick={() => setDeviceMode('tablet')}
+                    className={cn(
+                      "p-1 rounded-md transition-all",
+                      deviceMode === 'tablet' ? "bg-white text-indigo-600 shadow-sm" : "text-[#6B7280]"
+                    )}
+                  >
+                    <Tablet className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                  </button>
+                  <button
+                    onClick={() => setDeviceMode('mobile')}
+                    className={cn(
+                      "p-1 rounded-md transition-all",
+                      deviceMode === 'mobile' ? "bg-white text-indigo-600 shadow-sm" : "text-[#6B7280]"
+                    )}
+                  >
+                    <Smartphone className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                  </button>
+                </div>
+              )}
 
-            {output && (
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={handleDownload}
-                  className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-[#374151] hover:bg-[#F3F4F6] rounded-lg transition-colors border border-[#E5E7EB]"
-                >
-                  <Download className="w-4 h-4" />
-                  Tải về .html
-                </button>
-                <button
-                  onClick={handleCopy}
-                  className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-[#374151] hover:bg-[#F3F4F6] rounded-lg transition-colors border border-[#E5E7EB]"
-                >
-                  {copied ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
-                  {copied ? 'Đã sao chép' : 'Sao chép mã'}
-                </button>
-              </div>
-            )}
+              {/* Action Buttons */}
+              {output && (
+                <div className="flex items-center gap-1.5 ml-auto md:ml-0">
+                  <button
+                    onClick={handleDownload}
+                    className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] sm:text-sm font-medium text-[#374151] hover:bg-[#F3F4F6] rounded-lg transition-colors border border-[#E5E7EB] bg-white"
+                  >
+                    <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                    <span>Tải về</span>
+                  </button>
+                  <button
+                    onClick={handleCopy}
+                    className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] sm:text-sm font-medium text-[#374151] hover:bg-[#F3F4F6] rounded-lg transition-colors border border-[#E5E7EB] bg-white"
+                  >
+                    {copied ? <Check className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-green-600" /> : <Copy className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
+                    <span>{copied ? 'Xong' : 'Chép'}</span>
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Output Content */}
-          <div className="flex-1 overflow-hidden p-8 flex justify-center relative">
+          <div className="flex-1 overflow-hidden p-3 sm:p-6 md:p-8 flex justify-center relative">
             {output ? (
               viewMode === 'preview' ? (
                 <div 
                   className={cn(
                     "bg-white shadow-2xl rounded-xl overflow-hidden transition-all duration-300 border border-[#E5E7EB]",
                     deviceMode === 'desktop' && "w-full h-full",
-                    deviceMode === 'tablet' && "w-[768px] h-full",
-                    deviceMode === 'mobile' && "w-[375px] h-full"
+                    deviceMode === 'tablet' && "w-full max-w-[768px] h-full",
+                    deviceMode === 'mobile' && "w-full max-w-[375px] h-full"
                   )}
                 >
                   <iframe
@@ -482,32 +561,34 @@ export default function App() {
                   />
                 </div>
               ) : (
-                <div className="w-full h-full bg-[#1E293B] rounded-xl overflow-hidden shadow-2xl border border-[#334155]">
-                  <div className="flex items-center gap-2 px-4 py-2 bg-[#0F172A] border-b border-[#334155]">
+                <div className="w-full h-full bg-[#1E293B] rounded-xl overflow-hidden shadow-2xl border border-[#334155] flex flex-col">
+                  <div className="flex items-center gap-2 px-4 py-2 bg-[#0F172A] border-b border-[#334155] shrink-0">
                     <div className="flex gap-1.5">
-                      <div className="w-3 h-3 rounded-full bg-[#FF5F56]" />
-                      <div className="w-3 h-3 rounded-full bg-[#FFBD2E]" />
-                      <div className="w-3 h-3 rounded-full bg-[#27C93F]" />
+                      <div className="w-2.5 h-2.5 rounded-full bg-[#FF5F56]" />
+                      <div className="w-2.5 h-2.5 rounded-full bg-[#FFBD2E]" />
+                      <div className="w-2.5 h-2.5 rounded-full bg-[#27C93F]" />
                     </div>
-                    <span className="text-xs font-mono text-[#94A3B8] ml-2">{fileName || 'output.html'}</span>
+                    <span className="text-[10px] sm:text-xs font-mono text-[#94A3B8] ml-2 truncate max-w-[150px] sm:max-w-none">
+                      {fileName || 'output.html'}
+                    </span>
                   </div>
-                  <pre className="p-6 overflow-auto h-[calc(100%-40px)] text-sm font-mono text-[#E2E8F0] leading-relaxed">
+                  <pre className="p-3 sm:p-6 overflow-auto flex-1 text-[10px] sm:text-sm font-mono text-[#E2E8F0] leading-relaxed">
                     <code>{output}</code>
                   </pre>
                 </div>
               )
             ) : (
-              <div className="flex flex-col items-center justify-center text-center max-w-md">
-                <div className="w-20 h-20 bg-white rounded-3xl flex items-center justify-center shadow-sm mb-8 border border-[#E5E7EB]">
-                  <Upload className="w-10 h-10 text-indigo-600" />
+              <div className="flex flex-col items-center justify-center text-center max-w-md px-4">
+                <div className="w-16 h-16 sm:w-20 sm:h-20 bg-white rounded-2xl sm:rounded-3xl flex items-center justify-center shadow-sm mb-6 sm:mb-8 border border-[#E5E7EB]">
+                  <Upload className="w-8 h-8 sm:w-10 sm:h-10 text-indigo-600" />
                 </div>
-                <h3 className="text-2xl font-bold text-[#111827] mb-3">Chuyển đổi Word sang HTML</h3>
-                <p className="text-[#6B7280] mb-8">
+                <h3 className="text-xl sm:text-2xl font-bold text-[#111827] mb-3">Chuyển đổi Word sang HTML</h3>
+                <p className="text-sm sm:text-base text-[#6B7280] mb-6 sm:mb-8">
                   Kéo và thả tệp Word (.docx) vào đây hoặc nhấn nút bên dưới để chuyển đổi trực tiếp sang mã HTML sạch.
                 </p>
                 <button
                   onClick={() => fileInputRef.current?.click()}
-                  className="px-6 py-3 bg-white border border-[#E5E7EB] text-[#374151] rounded-xl font-semibold shadow-sm hover:bg-[#F9FAFB] transition-all flex items-center gap-2"
+                  className="px-5 py-2.5 sm:px-6 sm:py-3 bg-white border border-[#E5E7EB] text-[#374151] rounded-xl font-semibold shadow-sm hover:bg-[#F9FAFB] transition-all flex items-center gap-2 text-sm sm:text-base"
                 >
                   <Upload className="w-5 h-5" />
                   Chọn tệp từ máy tính
@@ -524,8 +605,8 @@ export default function App() {
       </main>
 
       {/* Footer */}
-      <footer className="px-6 py-3 bg-white border-t border-[#E5E7EB] flex items-center justify-between shrink-0">
-
+      <footer className="px-4 sm:px-6 py-2 bg-white border-t border-[#E5E7EB] flex items-center justify-between shrink-0">
+        <p className="text-[10px] text-[#9CA3AF]">© 2026 Word to HTML</p>
       </footer>
     </div>
   );
