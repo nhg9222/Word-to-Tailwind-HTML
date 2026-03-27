@@ -18,7 +18,9 @@ import {
   Smartphone,
   Tablet,
   Upload,
-  FileCode
+  FileCode,
+  Download,
+  FileUp
 } from 'lucide-react';
 import { cn } from './lib/utils';
 
@@ -28,6 +30,7 @@ type DeviceMode = 'desktop' | 'tablet' | 'mobile';
 export default function App() {
   const [output, setOutput] = useState('');
   const [isParsing, setIsParsing] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('preview');
   const [deviceMode, setDeviceMode] = useState<DeviceMode>('desktop');
   const [copied, setCopied] = useState(false);
@@ -37,10 +40,7 @@ export default function App() {
   const previewRef = useRef<HTMLIFrameElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
+  const processFile = async (file: File) => {
     if (!file.name.endsWith('.docx')) {
       setError('Vui lòng chọn tệp Word (.docx)');
       return;
@@ -52,7 +52,6 @@ export default function App() {
 
     try {
       const arrayBuffer = await file.arrayBuffer();
-      // Convert to HTML directly using mammoth
       const result = await mammoth.convertToHtml({ arrayBuffer });
       setOutput(result.value);
       setViewMode('preview');
@@ -65,10 +64,64 @@ export default function App() {
     }
   };
 
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) processFile(file);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) processFile(file);
+  };
+
   const handleCopy = () => {
     navigator.clipboard.writeText(output);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleDownload = () => {
+    const fullHtml = `
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${fileName?.replace('.docx', '') || 'Converted Document'}</title>
+    <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #fff; }
+    </style>
+</head>
+<body class="p-8 sm:p-12 md:p-16">
+    <div class="prose prose-indigo max-w-none mx-auto">
+        ${output}
+    </div>
+</body>
+</html>`;
+
+    const blob = new Blob([fullHtml], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName?.replace('.docx', '.html') || 'document.html';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
 
   const handleReset = () => {
@@ -93,9 +146,7 @@ export default function App() {
               <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
               <style>
                 body { font-family: 'Inter', sans-serif; margin: 0; padding: 0; }
-                /* Hide scrollbar for Chrome, Safari and Opera */
                 body::-webkit-scrollbar { display: none; }
-                /* Hide scrollbar for IE, Edge and Firefox */
                 body { -ms-overflow-style: none; scrollbar-width: none; }
               </style>
             </head>
@@ -112,7 +163,24 @@ export default function App() {
   }, [output, viewMode]);
 
   return (
-    <div className="flex flex-col h-screen bg-[#F9FAFB] text-[#111827]">
+    <div 
+      className="flex flex-col h-screen bg-[#F9FAFB] text-[#111827]"
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      {/* Drag Overlay */}
+      {isDragging && (
+        <div className="fixed inset-0 z-50 bg-indigo-600/10 backdrop-blur-sm border-4 border-dashed border-indigo-600 flex flex-col items-center justify-center pointer-events-none">
+          <div className="bg-white p-8 rounded-3xl shadow-2xl flex flex-col items-center gap-4 animate-in zoom-in-95 duration-200">
+            <div className="w-16 h-16 bg-indigo-100 rounded-2xl flex items-center justify-center">
+              <FileUp className="w-8 h-8 text-indigo-600" />
+            </div>
+            <p className="text-xl font-bold text-indigo-600">Thả tệp Word vào đây</p>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <header className="flex items-center justify-between px-6 py-4 bg-white border-b border-[#E5E7EB] shrink-0">
         <div className="flex items-center gap-2">
@@ -223,18 +291,27 @@ export default function App() {
             )}
 
             {output && (
-              <button
-                onClick={handleCopy}
-                className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-[#374151] hover:bg-[#F3F4F6] rounded-lg transition-colors border border-[#E5E7EB]"
-              >
-                {copied ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
-                {copied ? 'Đã sao chép' : 'Sao chép mã'}
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleDownload}
+                  className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-[#374151] hover:bg-[#F3F4F6] rounded-lg transition-colors border border-[#E5E7EB]"
+                >
+                  <Download className="w-4 h-4" />
+                  Tải về .html
+                </button>
+                <button
+                  onClick={handleCopy}
+                  className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-[#374151] hover:bg-[#F3F4F6] rounded-lg transition-colors border border-[#E5E7EB]"
+                >
+                  {copied ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
+                  {copied ? 'Đã sao chép' : 'Sao chép mã'}
+                </button>
+              </div>
             )}
           </div>
 
           {/* Output Content */}
-          <div className="flex-1 overflow-hidden p-8 flex justify-center">
+          <div className="flex-1 overflow-hidden p-8 flex justify-center relative">
             {output ? (
               viewMode === 'preview' ? (
                 <div 
@@ -273,7 +350,7 @@ export default function App() {
                 </div>
                 <h3 className="text-2xl font-bold text-[#111827] mb-3">Chuyển đổi Word sang HTML</h3>
                 <p className="text-[#6B7280] mb-8">
-                  Tải lên tệp Word (.docx) của bạn để chuyển đổi trực tiếp sang mã HTML sạch với phong cách Tailwind CSS hiện đại.
+                  Kéo và thả tệp Word (.docx) vào đây hoặc nhấn nút bên dưới để chuyển đổi trực tiếp sang mã HTML sạch.
                 </p>
                 <button
                   onClick={() => fileInputRef.current?.click()}
@@ -295,19 +372,7 @@ export default function App() {
 
       {/* Footer */}
       <footer className="px-6 py-3 bg-white border-t border-[#E5E7EB] flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-4 text-xs text-[#6B7280]">
-          <span className="flex items-center gap-1">
-            <ChevronRight className="w-3 h-3" />
-            Direct Code Conversion
-          </span>
-          <span className="flex items-center gap-1">
-            <ChevronRight className="w-3 h-3" />
-            Tailwind Typography
-          </span>
-        </div>
-        <div className="text-xs text-[#9CA3AF]">
-          © 2026 Word to HTML Converter
-        </div>
+
       </footer>
     </div>
   );
