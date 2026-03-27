@@ -26,6 +26,7 @@ import { cn } from './lib/utils';
 
 type ViewMode = 'preview' | 'code';
 type DeviceMode = 'desktop' | 'tablet' | 'mobile';
+type ConversionMode = 'structured' | 'plain';
 
 export default function App() {
   const [output, setOutput] = useState('');
@@ -33,14 +34,16 @@ export default function App() {
   const [isDragging, setIsDragging] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('preview');
   const [deviceMode, setDeviceMode] = useState<DeviceMode>('desktop');
+  const [conversionMode, setConversionMode] = useState<ConversionMode>('structured');
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
+  const [lastFile, setLastFile] = useState<File | null>(null);
   
   const previewRef = useRef<HTMLIFrameElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const processFile = async (file: File) => {
+  const processFile = async (file: File, mode: ConversionMode = conversionMode) => {
     if (!file.name.endsWith('.docx')) {
       setError('Vui lòng chọn tệp Word (.docx)');
       return;
@@ -49,11 +52,35 @@ export default function App() {
     setIsParsing(true);
     setError(null);
     setFileName(file.name);
+    setLastFile(file);
 
     try {
       const arrayBuffer = await file.arrayBuffer();
-      const result = await mammoth.convertToHtml({ arrayBuffer });
-      setOutput(result.value);
+      
+      if (mode === 'structured') {
+        const options = {
+          styleMap: [
+            "p[style-name='Heading 1'] => h1:fresh",
+            "p[style-name='Heading 2'] => h2:fresh",
+            "p[style-name='Heading 3'] => h3:fresh",
+            "p[style-name='List Bullet'] => ul > li:fresh",
+            "p[style-name='List Number'] => ol > li:fresh"
+          ]
+        };
+
+        const result = await mammoth.convertToHtml({ arrayBuffer }, options);
+        let processedHtml = result.value;
+        processedHtml = processedHtml.replace(/<\/ul>\s*<ul>/g, "");
+        processedHtml = processedHtml.replace(/<\/ol>\s*<ol>/g, "");
+        setOutput(processedHtml);
+      } else {
+        // Plain Paragraphs mode
+        const result = await mammoth.extractRawText({ arrayBuffer });
+        const lines = result.value.split('\n').filter(line => line.trim() !== '');
+        const plainHtml = lines.map(line => `<p>${line.trim()}</p>`).join('\n');
+        setOutput(plainHtml);
+      }
+      
       setViewMode('preview');
     } catch (err) {
       console.error(err);
@@ -67,6 +94,13 @@ export default function App() {
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) processFile(file);
+  };
+
+  const handleModeChange = (newMode: ConversionMode) => {
+    setConversionMode(newMode);
+    if (lastFile) {
+      processFile(lastFile, newMode);
+    }
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -231,31 +265,62 @@ export default function App() {
         <div className="flex-1 flex flex-col bg-[#F3F4F6]">
           {/* Output Toolbar */}
           <div className="flex items-center justify-between px-4 py-2 bg-white border-b border-[#E5E7EB]">
-            <div className="flex bg-[#F3F4F6] p-1 rounded-lg">
-              <button
-                onClick={() => setViewMode('preview')}
-                className={cn(
-                  "flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-all",
-                  viewMode === 'preview' 
-                    ? "bg-white text-indigo-600 shadow-sm" 
-                    : "text-[#6B7280] hover:text-[#374151]"
-                )}
-              >
-                <Eye className="w-4 h-4" />
-                Xem trước
-              </button>
-              <button
-                onClick={() => setViewMode('code')}
-                className={cn(
-                  "flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-all",
-                  viewMode === 'code' 
-                    ? "bg-white text-indigo-600 shadow-sm" 
-                    : "text-[#6B7280] hover:text-[#374151]"
-                )}
-              >
-                <Code className="w-4 h-4" />
-                Mã nguồn
-              </button>
+            <div className="flex items-center gap-4">
+              <div className="flex bg-[#F3F4F6] p-1 rounded-lg">
+                <button
+                  onClick={() => setViewMode('preview')}
+                  className={cn(
+                    "flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-all",
+                    viewMode === 'preview' 
+                      ? "bg-white text-indigo-600 shadow-sm" 
+                      : "text-[#6B7280] hover:text-[#374151]"
+                  )}
+                >
+                  <Eye className="w-4 h-4" />
+                  Xem trước
+                </button>
+                <button
+                  onClick={() => setViewMode('code')}
+                  className={cn(
+                    "flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-all",
+                    viewMode === 'code' 
+                      ? "bg-white text-indigo-600 shadow-sm" 
+                      : "text-[#6B7280] hover:text-[#374151]"
+                  )}
+                >
+                  <Code className="w-4 h-4" />
+                  Mã nguồn
+                </button>
+              </div>
+
+              <div className="h-6 w-px bg-[#E5E7EB]" />
+
+              <div className="flex bg-[#F3F4F6] p-1 rounded-lg">
+                <button
+                  onClick={() => handleModeChange('structured')}
+                  className={cn(
+                    "px-3 py-1.5 text-sm font-medium rounded-md transition-all",
+                    conversionMode === 'structured' 
+                      ? "bg-white text-indigo-600 shadow-sm" 
+                      : "text-[#6B7280] hover:text-[#374151]"
+                  )}
+                  title="Giữ nguyên cấu trúc (Tiêu đề, Danh sách...)"
+                >
+                  Cấu trúc
+                </button>
+                <button
+                  onClick={() => handleModeChange('plain')}
+                  className={cn(
+                    "px-3 py-1.5 text-sm font-medium rounded-md transition-all",
+                    conversionMode === 'plain' 
+                      ? "bg-white text-indigo-600 shadow-sm" 
+                      : "text-[#6B7280] hover:text-[#374151]"
+                  )}
+                  title="Chỉ lấy các thẻ <p>"
+                >
+                  Chỉ thẻ P
+                </button>
+              </div>
             </div>
 
             {viewMode === 'preview' && output && (
