@@ -13,6 +13,7 @@ import {
   Layout, 
   Trash2,
   ChevronRight,
+  ArrowUp,
   Loader2,
   Monitor,
   Smartphone,
@@ -23,6 +24,7 @@ import {
   FileUp
 } from 'lucide-react';
 import { cn } from './lib/utils';
+import { templates, Template } from './templates';
 
 type ViewMode = 'preview' | 'code';
 type DeviceMode = 'desktop' | 'tablet' | 'mobile';
@@ -35,6 +37,8 @@ export default function App() {
   const [viewMode, setViewMode] = useState<ViewMode>('preview');
   const [deviceMode, setDeviceMode] = useState<DeviceMode>('desktop');
   const [conversionMode, setConversionMode] = useState<ConversionMode>('structured');
+  const [selectedStyleId, setSelectedStyleId] = useState<string>('minimal');
+  const [showScrollTop, setShowScrollTop] = useState(true);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
@@ -120,13 +124,48 @@ export default function App() {
     if (file) processFile(file);
   };
 
+  const getScrollTopHtml = () => {
+    if (!showScrollTop) return '';
+    return `
+      <button id="scrollTopBtn" title="Cuộn lên đầu trang" style="display: none; position: fixed; bottom: 30px; right: 30px; z-index: 99; border: none; outline: none; background-color: #4f46e5; color: white; cursor: pointer; width: 48px; height: 48px; border-radius: 50%; box-shadow: 0 4px 12px rgba(0,0,0,0.15); transition: all 0.3s ease; display: flex; align-items: center; justify-content: center;">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15-6-6-6 6"/></svg>
+      </button>
+      <script>
+        const btn = document.getElementById("scrollTopBtn");
+        window.onscroll = function() {
+          if (document.body.scrollTop > 300 || document.documentElement.scrollTop > 300) {
+            btn.style.display = "flex";
+            btn.style.opacity = "1";
+          } else {
+            btn.style.opacity = "0";
+            setTimeout(() => { if(btn.style.opacity === "0") btn.style.display = "none"; }, 300);
+          }
+        };
+        btn.onclick = function() {
+          window.scrollTo({top: 0, behavior: 'smooth'});
+        };
+      </script>
+    `;
+  };
+
   const handleCopy = () => {
-    navigator.clipboard.writeText(output);
+    const currentTemplate = templates.find(t => t.id === selectedStyleId) || templates[0];
+    const fullHtmlForCopy = `
+<div class="${currentTemplate.containerClass}">
+  ${currentTemplate.header(fileName?.replace('.docx', '') || '')}
+  <div class="prose prose-indigo max-w-none">
+    ${output}
+  </div>
+  ${currentTemplate.footer()}
+  ${getScrollTopHtml()}
+</div>`;
+    navigator.clipboard.writeText(fullHtmlForCopy);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
 
   const handleDownload = () => {
+    const currentTemplate = templates.find(t => t.id === selectedStyleId) || templates[0];
     const fullHtml = `
 <!DOCTYPE html>
 <html lang="vi">
@@ -137,12 +176,18 @@ export default function App() {
     <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        body { font-family: 'Inter', sans-serif; background-color: #fff; }
+        body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; margin: 0; padding: 0; }
+        #scrollTopBtn:hover { transform: translateY(-3px); background-color: #4338ca !important; }
     </style>
 </head>
-<body class="p-8 sm:p-12 md:p-16">
-    <div class="prose prose-indigo max-w-none mx-auto">
-        ${output}
+<body>
+    <div class="${currentTemplate.containerClass}">
+        ${currentTemplate.header(fileName?.replace('.docx', '') || '')}
+        <div class="prose prose-indigo max-w-none">
+            ${output}
+        </div>
+        ${currentTemplate.footer()}
+        ${getScrollTopHtml()}
     </div>
 </body>
 </html>`;
@@ -164,11 +209,12 @@ export default function App() {
     setError(null);
   };
 
-  // Update iframe content when output changes
+  // Update iframe content when output or style changes
   useEffect(() => {
     if (previewRef.current && output) {
       const doc = previewRef.current.contentDocument;
       if (doc) {
+        const currentTemplate = templates.find(t => t.id === selectedStyleId) || templates[0];
         doc.open();
         doc.write(`
           <!DOCTYPE html>
@@ -179,14 +225,20 @@ export default function App() {
               <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
               <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
               <style>
-                body { font-family: 'Inter', sans-serif; margin: 0; padding: 0; }
+                body { font-family: 'Inter', sans-serif; margin: 0; padding: 0; background-color: #f3f4f6; }
                 body::-webkit-scrollbar { display: none; }
                 body { -ms-overflow-style: none; scrollbar-width: none; }
+                #scrollTopBtn:hover { transform: translateY(-3px); background-color: #4338ca !important; }
               </style>
             </head>
-            <body class="bg-white p-8 sm:p-12 md:p-16">
-              <div id="content" class="prose prose-indigo max-w-none mx-auto">
-                ${output}
+            <body>
+              <div class="${currentTemplate.containerClass}">
+                ${currentTemplate.header(fileName?.replace('.docx', '') || '')}
+                <div id="content" class="prose prose-indigo max-w-none">
+                  ${output}
+                </div>
+                ${currentTemplate.footer()}
+                ${getScrollTopHtml()}
               </div>
             </body>
           </html>
@@ -194,7 +246,7 @@ export default function App() {
         doc.close();
       }
     }
-  }, [output, viewMode]);
+  }, [output, viewMode, selectedStyleId, fileName, showScrollTop]);
 
   return (
     <div 
@@ -321,6 +373,42 @@ export default function App() {
                   Chỉ thẻ P
                 </button>
               </div>
+
+              <div className="h-6 w-px bg-[#E5E7EB]" />
+
+              <div className="flex bg-[#F3F4F6] p-1 rounded-lg">
+                {templates.map((template) => (
+                  <button
+                    key={template.id}
+                    onClick={() => setSelectedStyleId(template.id)}
+                    className={cn(
+                      "px-3 py-1.5 text-sm font-medium rounded-md transition-all",
+                      selectedStyleId === template.id 
+                        ? "bg-white text-indigo-600 shadow-sm" 
+                        : "text-[#6B7280] hover:text-[#374151]"
+                    )}
+                    title={template.description}
+                  >
+                    {template.name}
+                  </button>
+                ))}
+              </div>
+
+              <div className="h-6 w-px bg-[#E5E7EB]" />
+
+              <button
+                onClick={() => setShowScrollTop(!showScrollTop)}
+                className={cn(
+                  "flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-lg transition-all border",
+                  showScrollTop 
+                    ? "bg-indigo-50 text-indigo-600 border-indigo-200" 
+                    : "bg-white text-[#6B7280] border-[#E5E7EB] hover:bg-[#F3F4F6]"
+                )}
+                title="Bật/Tắt nút cuộn lên đầu trang"
+              >
+                <ArrowUp className="w-4 h-4" />
+                Lên đầu trang
+              </button>
             </div>
 
             {viewMode === 'preview' && output && (
