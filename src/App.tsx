@@ -28,6 +28,10 @@ import {
   FileUp,
   Globe
 } from 'lucide-react';
+import Prism from 'prismjs';
+import 'prismjs/themes/prism-tomorrow.css';
+import 'prismjs/components/prism-markup';
+import Editor from 'react-simple-code-editor';
 import { cn } from './lib/utils';
 import { templates, Template } from './templates';
 
@@ -53,9 +57,34 @@ export default function App() {
   const [googleDocsUrl, setGoogleDocsUrl] = useState('');
   const [isFetchingUrl, setIsFetchingUrl] = useState(false);
   const [showUrlInput, setShowUrlInput] = useState(false);
+  const [formattedOutput, setFormattedOutput] = useState('');
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   
   const previewRef = useRef<HTMLIFrameElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const formatHtml = (html: string) => {
+    let indent = 0;
+    const tab = '  ';
+    let result = '';
+    // Split by tags, but keep the tags
+    const tokens = html.split(/(<[^>]+>)/g).filter(t => t.trim() !== '');
+
+    for (let i = 0; i < tokens.length; i++) {
+      const token = tokens[i].trim();
+      
+      if (token.startsWith('</')) {
+        indent--;
+        result += tab.repeat(Math.max(0, indent)) + token + '\n';
+      } else if (token.startsWith('<') && !token.endsWith('/>') && !token.match(/^<(br|hr|img|input|link|meta|area|base|col|embed|param|source|track|wbr)/)) {
+        result += tab.repeat(Math.max(0, indent)) + token + '\n';
+        indent++;
+      } else {
+        result += tab.repeat(Math.max(0, indent)) + token + '\n';
+      }
+    }
+    return result.trim();
+  };
 
   const processData = async (arrayBuffer: ArrayBuffer, name: string, mode: ConversionMode = conversionMode) => {
     setIsParsing(true);
@@ -87,13 +116,20 @@ export default function App() {
         // Thêm xuống dòng giữa các thẻ để mã HTML dễ đọc hơn (không bị nén 1 dòng)
         processedHtml = processedHtml.replace(/>\s*</g, '>\n<');
         
+        const formatted = formatHtml(processedHtml);
+        setFormattedOutput(formatted);
         setOutput(processedHtml);
+        setHasUnsavedChanges(false);
       } else {
         // Plain Paragraphs mode
         const result = await mammoth.extractRawText({ arrayBuffer });
         const lines = result.value.split('\n').filter(line => line.trim() !== '');
         const plainHtml = lines.map(line => `<p>${line.trim()}</p>`).join('\n');
+        
+        const formatted = formatHtml(plainHtml);
+        setFormattedOutput(formatted);
         setOutput(plainHtml);
+        setHasUnsavedChanges(false);
       }
       
       setViewMode('preview');
@@ -148,6 +184,24 @@ export default function App() {
       setError(err instanceof Error ? err.message : 'Lỗi kết nối khi tải Google Docs.');
     } finally {
       setIsFetchingUrl(false);
+    }
+  };
+
+  const handleCodeChange = (newCode: string) => {
+    setFormattedOutput(newCode);
+    setHasUnsavedChanges(true);
+  };
+
+  const handleApplyChanges = () => {
+    setOutput(formattedOutput);
+    setHasUnsavedChanges(false);
+  };
+
+  const handleReFormat = () => {
+    const formatted = formatHtml(formattedOutput);
+    if (formatted !== formattedOutput) {
+      setFormattedOutput(formatted);
+      setHasUnsavedChanges(true);
     }
   };
 
@@ -323,6 +377,10 @@ ${extractedCss}
 
   // Update iframe content when output, style or settings change
   useEffect(() => {
+    // Prism highlightAll is handled by the Editor component now
+  }, [viewMode, formattedOutput]);
+
+  useEffect(() => {
     if (previewRef.current && output) {
       const doc = previewRef.current.contentDocument;
       if (doc) {
@@ -362,6 +420,9 @@ ${extractedCss}
                 .prose th, .prose td { border: 1px solid #d1d5db !important; padding: 12px 15px !important; text-align: left !important; }
                 .prose thead { background-color: #f9fafb !important; }
                 .prose th { font-weight: 600 !important; color: #111827 !important; }
+
+                /* Image Optimization */
+                .prose img { max-width: 100% !important; height: auto !important; border-radius: 8px !important; margin: 2rem auto !important; display: block !important; }
 
                 /* Ensure template font applies to prose */
                 .prose { font-family: inherit !important; }
@@ -719,13 +780,53 @@ ${extractedCss}
                       <div className="w-2.5 h-2.5 rounded-full bg-[#FFBD2E]" />
                       <div className="w-2.5 h-2.5 rounded-full bg-[#27C93F]" />
                     </div>
-                    <span className="text-[10px] sm:text-xs font-mono text-[#94A3B8] ml-2 truncate max-w-[150px] sm:max-w-none">
+                    <span className="text-[10px] sm:text-xs font-mono text-[#94A3B8] ml-2 truncate max-w-[150px] sm:max-w-none flex items-center gap-2">
                       {fileName || 'output.html'}
+                      {hasUnsavedChanges && (
+                        <span className="flex items-center gap-1 text-amber-500 animate-pulse">
+                          <div className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                          <span className="text-[9px] font-bold uppercase">Chưa cập nhật</span>
+                        </span>
+                      )}
                     </span>
+                    <div className="ml-auto flex items-center gap-1.5">
+                      <button
+                        onClick={handleApplyChanges}
+                        disabled={!hasUnsavedChanges}
+                        className={cn(
+                          "px-2 py-1 rounded text-[10px] font-medium transition-all flex items-center gap-1 shadow-sm",
+                          hasUnsavedChanges 
+                            ? "bg-indigo-600 hover:bg-indigo-700 text-white" 
+                            : "bg-[#334155] text-[#94A3B8] opacity-50 cursor-not-allowed"
+                        )}
+                        title="Cập nhật thay đổi sang Preview"
+                      >
+                        <Check className="w-3 h-3" />
+                        <span>Cập nhật</span>
+                      </button>
+                      <button
+                        onClick={handleReFormat}
+                        className="px-2 py-1 bg-[#334155] hover:bg-[#475569] text-[#E2E8F0] rounded text-[10px] font-medium transition-colors flex items-center gap-1"
+                        title="Định dạng lại mã"
+                      >
+                        <Layout className="w-3 h-3" />
+                        <span>Format</span>
+                      </button>
+                    </div>
                   </div>
-                  <pre className="p-3 sm:p-6 overflow-auto flex-1 text-[10px] sm:text-sm font-mono text-[#E2E8F0] leading-relaxed">
-                    <code>{output}</code>
-                  </pre>
+                  <div className="flex-1 overflow-auto bg-[#1E293B]">
+                    <Editor
+                      value={formattedOutput}
+                      onValueChange={handleCodeChange}
+                      highlight={code => Prism.highlight(code, Prism.languages.markup, 'markup')}
+                      padding={20}
+                      className="font-mono text-[10px] sm:text-sm focus:outline-none min-h-full"
+                      style={{
+                        fontFamily: '"JetBrains Mono", "Fira Code", monospace',
+                        color: '#E2E8F0',
+                      }}
+                    />
+                  </div>
                 </div>
               )
             ) : (
