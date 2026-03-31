@@ -76,6 +76,11 @@ export default function App() {
 
         const result = await mammoth.convertToHtml({ arrayBuffer }, options);
         let processedHtml = result.value;
+        
+        // Bọc table bằng div overflow-x-auto để hỗ trợ cuộn ngang trên thiết bị nhỏ
+        processedHtml = processedHtml.replace(/<table/g, '<div class="overflow-x-auto"><table');
+        processedHtml = processedHtml.replace(/<\/table>/g, '</table></div>');
+
         processedHtml = processedHtml.replace(/<\/ul>\s*<ul>/g, "");
         processedHtml = processedHtml.replace(/<\/ol>\s*<ol>/g, "");
         
