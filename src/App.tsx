@@ -6,6 +6,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import mammoth from 'mammoth';
 import { 
+  Link,
   Code, 
   Eye, 
   Copy, 
@@ -24,7 +25,8 @@ import {
   Upload,
   FileCode,
   Download,
-  FileUp
+  FileUp,
+  Globe
 } from 'lucide-react';
 import { cn } from './lib/utils';
 import { templates, Template } from './templates';
@@ -48,24 +50,19 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
   const [lastFile, setLastFile] = useState<File | null>(null);
+  const [googleDocsUrl, setGoogleDocsUrl] = useState('');
+  const [isFetchingUrl, setIsFetchingUrl] = useState(false);
+  const [showUrlInput, setShowUrlInput] = useState(false);
   
   const previewRef = useRef<HTMLIFrameElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const processFile = async (file: File, mode: ConversionMode = conversionMode) => {
-    if (!file.name.endsWith('.docx')) {
-      setError('Vui lòng chọn tệp Word (.docx)');
-      return;
-    }
-
+  const processData = async (arrayBuffer: ArrayBuffer, name: string, mode: ConversionMode = conversionMode) => {
     setIsParsing(true);
     setError(null);
-    setFileName(file.name);
-    setLastFile(file);
+    setFileName(name);
 
     try {
-      const arrayBuffer = await file.arrayBuffer();
-      
       if (mode === 'structured') {
         const options = {
           styleMap: [
@@ -97,10 +94,55 @@ export default function App() {
       setViewMode('preview');
     } catch (err) {
       console.error(err);
-      setError('Không thể chuyển đổi tệp Word. Vui lòng thử lại.');
+      setError('Không thể chuyển đổi nội dung. Vui lòng thử lại.');
     } finally {
       setIsParsing(false);
-      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const processFile = async (file: File, mode: ConversionMode = conversionMode) => {
+    if (!file.name.endsWith('.docx')) {
+      setError('Vui lòng chọn tệp Word (.docx)');
+      return;
+    }
+
+    setLastFile(file);
+    const arrayBuffer = await file.arrayBuffer();
+    await processData(arrayBuffer, file.name, mode);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const handleUrlSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!googleDocsUrl.trim()) return;
+
+    // Extract ID from Google Docs URL
+    const docIdMatch = googleDocsUrl.match(/\/d\/(.*?)(\/|$)/);
+    if (!docIdMatch) {
+      setError('Link Google Docs không hợp lệ. Vui lòng kiểm tra lại.');
+      return;
+    }
+
+    const docId = docIdMatch[1];
+    const exportUrl = `https://docs.google.com/document/d/${docId}/export?format=docx`;
+
+    setIsFetchingUrl(true);
+    setError(null);
+
+    try {
+      const response = await fetch(exportUrl);
+      if (!response.ok) {
+        throw new Error('Không thể tải file từ Google Docs. Hãy đảm bảo link đã được chia sẻ công khai (Public).');
+      }
+      const arrayBuffer = await response.arrayBuffer();
+      await processData(arrayBuffer, 'Google_Doc.docx');
+      setShowUrlInput(false);
+      setGoogleDocsUrl('');
+    } catch (err) {
+      console.error(err);
+      setError(err instanceof Error ? err.message : 'Lỗi kết nối khi tải Google Docs.');
+    } finally {
+      setIsFetchingUrl(false);
     }
   };
 
@@ -358,41 +400,88 @@ ${extractedCss}
           </h1>
         </div>
         
-        <div className="flex items-center gap-1.5 sm:gap-3">
-          {output && (
-            <button 
-              onClick={handleReset}
-              className="p-2 text-[#6B7280] hover:bg-[#F3F4F6] rounded-lg transition-colors"
-              title="Xóa tất cả"
-            >
-              <Trash2 className="w-4.5 h-4.5 sm:w-5 sm:h-5" />
-            </button>
-          )}
-          <input
-            type="file"
-            ref={fileInputRef}
-            onChange={handleFileUpload}
-            accept=".docx"
-            className="hidden"
-          />
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            disabled={isParsing}
-            className={cn(
-              "flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 py-1.5 sm:py-2 bg-indigo-600 text-white rounded-lg text-xs sm:text-sm font-medium transition-all",
-              "hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+          <div className="flex items-center gap-1.5 sm:gap-3">
+            {output && (
+              <button 
+                onClick={handleReset}
+                className="p-2 text-[#6B7280] hover:bg-[#F3F4F6] rounded-lg transition-colors"
+                title="Xóa tất cả"
+              >
+                <Trash2 className="w-4.5 h-4.5 sm:w-5 sm:h-5" />
+              </button>
             )}
-          >
-            {isParsing ? (
-              <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 animate-spin" />
-            ) : (
-              <Upload className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-            )}
-            <span className="hidden xs:inline">{isParsing ? 'Đang xử lý...' : 'Tải lên Word'}</span>
-            <span className="xs:hidden">{isParsing ? '...' : 'Tải lên'}</span>
-          </button>
-        </div>
-      </header>
+            
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => setShowUrlInput(!showUrlInput)}
+                className={cn(
+                  "flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all border",
+                  showUrlInput 
+                    ? "bg-indigo-50 text-indigo-600 border-indigo-200" 
+                    : "bg-white text-[#374151] border-[#E5E7EB] hover:bg-[#F3F4F6]"
+                )}
+              >
+                <Link className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                <span className="hidden xs:inline">Link Google Docs</span>
+                <span className="xs:hidden">Link</span>
+              </button>
+
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileUpload}
+                accept=".docx"
+                className="hidden"
+              />
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isParsing || isFetchingUrl}
+                className={cn(
+                  "flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 py-1.5 sm:py-2 bg-indigo-600 text-white rounded-lg text-xs sm:text-sm font-medium transition-all",
+                  "hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                )}
+              >
+                {isParsing ? (
+                  <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 animate-spin" />
+                ) : (
+                  <Upload className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                )}
+                <span className="hidden xs:inline">{isParsing ? 'Đang xử lý...' : 'Tải lên Word'}</span>
+                <span className="xs:hidden">{isParsing ? '...' : 'Tải lên'}</span>
+              </button>
+            </div>
+          </div>
+        </header>
+
+        {/* URL Input Bar */}
+        {showUrlInput && (
+          <div className="bg-white border-b border-[#E5E7EB] px-4 sm:px-6 py-3 animate-in slide-in-from-top duration-200">
+            <form onSubmit={handleUrlSubmit} className="max-w-3xl mx-auto flex gap-2">
+              <div className="relative flex-1">
+                <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9CA3AF]" />
+                <input
+                  type="url"
+                  value={googleDocsUrl}
+                  onChange={(e) => setGoogleDocsUrl(e.target.value)}
+                  placeholder="Dán link Google Docs (đã chia sẻ công khai)..."
+                  className="w-full pl-10 pr-4 py-2 bg-[#F3F4F6] border border-[#E5E7EB] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                  required
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={isFetchingUrl || !googleDocsUrl}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 transition-all flex items-center gap-2"
+              >
+                {isFetchingUrl ? <Loader2 className="w-4 h-4 animate-spin" /> : <ChevronRight className="w-4 h-4" />}
+                <span>Lấy file</span>
+              </button>
+            </form>
+            <p className="max-w-3xl mx-auto mt-2 text-[10px] sm:text-xs text-[#6B7280]">
+              Mẹo: Hãy đảm bảo tài liệu Google Docs của bạn đã được bật chế độ "Bất kỳ ai có liên kết đều có thể xem".
+            </p>
+          </div>
+        )}
 
       {/* Main Content */}
       <main className="flex flex-1 overflow-hidden">
@@ -635,7 +724,7 @@ ${extractedCss}
                 </div>
               )
             ) : (
-              <div className="flex flex-col items-center justify-center text-center max-w-md px-4">
+              <div className="flex flex-col items-center justify-center text-center max-w-lg px-4">
                 <div className="w-16 h-16 sm:w-20 sm:h-20 bg-white rounded-2xl sm:rounded-3xl flex items-center justify-center shadow-sm mb-6 sm:mb-8 border border-[#E5E7EB]">
                   <Upload className="w-8 h-8 sm:w-10 sm:h-10 text-indigo-600" />
                 </div>
@@ -643,15 +732,24 @@ ${extractedCss}
                 <p className="text-sm sm:text-base text-[#6B7280] mb-6 sm:mb-8">
                   Kéo và thả tệp Word (.docx) vào đây hoặc nhấn nút bên dưới để chuyển đổi trực tiếp sang mã HTML sạch.
                 </p>
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  className="px-5 py-2.5 sm:px-6 sm:py-3 bg-white border border-[#E5E7EB] text-[#374151] rounded-xl font-semibold shadow-sm hover:bg-[#F9FAFB] transition-all flex items-center gap-2 text-sm sm:text-base"
-                >
-                  <Upload className="w-5 h-5" />
-                  Chọn tệp từ máy tính
-                </button>
+                <div className="flex flex-col sm:flex-row gap-3 w-full">
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex-1 px-5 py-2.5 sm:px-6 sm:py-3 bg-white border border-[#E5E7EB] text-[#374151] rounded-xl font-semibold shadow-sm hover:bg-[#F9FAFB] transition-all flex items-center justify-center gap-2 text-sm sm:text-base"
+                  >
+                    <Upload className="w-5 h-5" />
+                    Chọn tệp local
+                  </button>
+                  <button
+                    onClick={() => setShowUrlInput(true)}
+                    className="flex-1 px-5 py-2.5 sm:px-6 sm:py-3 bg-indigo-50 border border-indigo-100 text-indigo-600 rounded-xl font-semibold shadow-sm hover:bg-indigo-100 transition-all flex items-center justify-center gap-2 text-sm sm:text-base"
+                  >
+                    <Link className="w-5 h-5" />
+                    Link Google Docs
+                  </button>
+                </div>
                 {error && (
-                  <div className="mt-6 p-4 bg-red-50 border border-red-100 text-red-600 rounded-lg text-sm">
+                  <div className="mt-6 p-4 bg-red-50 border border-red-100 text-red-600 rounded-lg text-sm w-full">
                     {error}
                   </div>
                 )}
