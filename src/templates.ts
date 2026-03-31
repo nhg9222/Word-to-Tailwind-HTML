@@ -90,7 +90,7 @@ const createBrandTemplate = (config: BrandConfig): Template => ({
     </div>
   `},
   footer: () => ``,
-  containerClass: 'max-w-4xl mx-auto py-10 sm:py-16 px-4 sm:px-8 bg-white'
+  containerClass: 'max-w-6xl mx-auto py-10 sm:py-16 px-4 sm:px-8 bg-white'
 });
 
 const LOGOS = {
@@ -289,6 +289,6 @@ export const templates: Template[] = [
     themeColor: '#4f46e5',
     header: (title) => `<h1 class="text-3xl font-bold text-gray-900 mb-8 border-b pb-4">${title}</h1>`,
     footer: () => ``,
-    containerClass: 'max-w-4xl mx-auto py-12 px-8 bg-white'
+    containerClass: 'max-w-6xl mx-auto py-12 px-8 bg-white'
   }
 ];

@@ -81,6 +81,10 @@ export default function App() {
         let processedHtml = result.value;
         processedHtml = processedHtml.replace(/<\/ul>\s*<ul>/g, "");
         processedHtml = processedHtml.replace(/<\/ol>\s*<ol>/g, "");
+        
+        // Thêm xuống dòng giữa các thẻ để mã HTML dễ đọc hơn (không bị nén 1 dòng)
+        processedHtml = processedHtml.replace(/>\s*</g, '>\n<');
+        
         setOutput(processedHtml);
       } else {
         // Plain Paragraphs mode
@@ -153,9 +157,41 @@ export default function App() {
     `;
   };
 
+  const getTailwindCss = () => {
+    if (!previewRef.current) return '';
+    try {
+      const doc = previewRef.current.contentDocument;
+      if (!doc) return '';
+      let css = '';
+      // Tailwind Play CDN usually puts its styles in a <style> tag it creates
+      // We'll collect all rules from all stylesheets to be safe
+      for (let i = 0; i < doc.styleSheets.length; i++) {
+        const sheet = doc.styleSheets[i];
+        try {
+          const rules = sheet.cssRules || sheet.rules;
+          for (let j = 0; j < rules.length; j++) {
+            css += rules[j].cssText + '\n';
+          }
+        } catch (e) {
+          // Skip cross-origin stylesheets if any
+          console.warn('Could not read stylesheet:', e);
+        }
+      }
+      return css;
+    } catch (e) {
+      console.error('Error extracting CSS:', e);
+      return '';
+    }
+  };
+
   const handleCopy = () => {
     const currentTemplate = templates.find(t => t.id === selectedStyleId) || templates[0];
+    const extractedCss = getTailwindCss();
+    
     const contentHtml = applyTemplate ? `
+<style>
+${extractedCss}
+</style>
 <div class="${currentTemplate.containerClass}">
   ${currentTemplate.header(fileName?.replace('.docx', '') || '')}
   <div class="prose prose-indigo max-w-none">
@@ -164,6 +200,9 @@ export default function App() {
   ${currentTemplate.footer()}
   ${getScrollTopHtml(currentTemplate.themeColor)}
 </div>` : `
+<style>
+${extractedCss}
+</style>
 <div class="prose prose-indigo max-w-none p-8">
   ${output}
   ${getScrollTopHtml()}
@@ -175,6 +214,8 @@ export default function App() {
 
   const handleDownload = () => {
     const currentTemplate = templates.find(t => t.id === selectedStyleId) || templates[0];
+    const extractedCss = getTailwindCss();
+
     const bodyContent = applyTemplate ? `
     <div class="${currentTemplate.containerClass}">
         ${currentTemplate.header(fileName?.replace('.docx', '') || '')}
@@ -196,11 +237,19 @@ export default function App() {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>${fileName?.replace('.docx', '') || 'Converted Document'}</title>
-    <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        body { font-family: 'Inter', sans-serif; background-color: ${applyTemplate ? '#f3f4f6' : '#fff'}; margin: 0; padding: 0; }
+        ${extractedCss}
+        body { margin: 0; padding: 0; background-color: ${applyTemplate ? '#f3f4f6' : '#fff'}; }
         #scrollTopBtn:hover { transform: translateY(-3px); background-color: ${applyTemplate ? currentTemplate.themeColor : '#4f46e5'} !important; opacity: 0.9; }
+        
+        /* Table Border Optimization */
+        .prose table { border-collapse: collapse !important; border: 1px solid #d1d5db !important; margin: 2rem 0 !important; width: 100% !important; }
+        .prose th, .prose td { border: 1px solid #d1d5db !important; padding: 12px 15px !important; text-align: left !important; }
+        .prose thead { background-color: #f9fafb !important; }
+        .prose th { font-weight: 600 !important; color: #111827 !important; }
+        
+        /* Ensure template font applies to prose */
+        .prose { font-family: inherit !important; }
     </style>
 </head>
 <body>
@@ -255,12 +304,20 @@ export default function App() {
               <meta charset="UTF-8">
               <meta name="viewport" content="width=device-width, initial-scale=1.0">
               <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
-              <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
               <style>
-                body { font-family: 'Inter', sans-serif; margin: 0; padding: 0; background-color: ${applyTemplate ? '#f3f4f6' : '#fff'}; }
+                body { margin: 0; padding: 0; background-color: ${applyTemplate ? '#f3f4f6' : '#fff'}; }
                 body::-webkit-scrollbar { display: none; }
                 body { -ms-overflow-style: none; scrollbar-width: none; }
                 #scrollTopBtn:hover { transform: translateY(-3px); background-color: ${applyTemplate ? currentTemplate.themeColor : '#4f46e5'} !important; opacity: 0.9; }
+                
+                /* Table Border Optimization */
+                .prose table { border-collapse: collapse !important; border: 1px solid #d1d5db !important; margin: 2rem 0 !important; width: 100% !important; }
+                .prose th, .prose td { border: 1px solid #d1d5db !important; padding: 12px 15px !important; text-align: left !important; }
+                .prose thead { background-color: #f9fafb !important; }
+                .prose th { font-weight: 600 !important; color: #111827 !important; }
+
+                /* Ensure template font applies to prose */
+                .prose { font-family: inherit !important; }
               </style>
             </head>
             <body>
